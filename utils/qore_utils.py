@@ -79,6 +79,7 @@ class FutureThread(QtCore.QObject):
 	def stop(self):
 		self._isRunning = False
 		self._thread.quit()
+		self._thread.wait()
 
 	def add_task(self, func, args, kwds, on_success, on_error):
 		assert self._isRunning, "Task queue not started"
