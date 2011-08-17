@@ -1,5 +1,14 @@
 #!/usr/bin/env python
 
+"""
+Showcases:
+* qt_compat
+* comncurrent's async functions which builds on go_utils / qore_utils task pool
+* qui_util's error log
+* logging slot exceptions
+* qui_util's QSignalingMainWindow which exposes some additional signals
+"""
+
 from __future__ import with_statement
 from __future__ import division
 
@@ -79,6 +88,7 @@ class Window(object):
 	@misc.log_exception(_moduleLogger)
 	def _on_background(self, *args):
 		print "background"
+		# Works perfectly well with a GObject task pool
 		agt = concurrent.AsyncGeneratorTask(self._taskPool, self._call_into_background)
 		agt.start(10)
 
