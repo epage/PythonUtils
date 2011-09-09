@@ -15,13 +15,13 @@ from __future__ import division
 import time
 import logging
 
-from utils import qt_compat
+from util import qt_compat
 QtCore = qt_compat.QtCore
 QtGui = qt_compat.import_module("QtGui")
-from utils import qore_utils
-from utils import qui_utils
-from utils import concurrent
-from utils import misc
+from util import qore_utils
+from util import qui_utils
+from util import concurrent
+from util import misc
 
 
 _moduleLogger = logging.getLogger(__name__)

@@ -10,10 +10,10 @@ from __future__ import division
 import logging
 import time
 
-from utils import qt_compat
+from util import qt_compat
 QtCore = qt_compat.QtCore
-from utils import qore_utils
-from utils import misc
+from util import qore_utils
+from util import misc
 
 
 _moduleLogger = logging.getLogger(__name__)
