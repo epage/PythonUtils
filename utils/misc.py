@@ -51,8 +51,8 @@ def log_exception(logger):
 		def wrapper(*args, **kwds):
 			try:
 				return func(*args, **kwds)
-			except Exception:
-				logger.exception(func.__name__)
+			except Exception as e:
+				logger.exception("Internal Error: %s" % e)
 				raise
 
 		return wrapper

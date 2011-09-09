@@ -6,103 +6,12 @@ import logging
 import qt_compat
 QtCore = qt_compat.QtCore
 QtGui = qt_compat.import_module("QtGui")
+import qore_utils
 
 import misc
 
 
 _moduleLogger = logging.getLogger(__name__)
-
-
-@contextlib.contextmanager
-def notify_error(log):
-	try:
-		yield
-	except:
-		log.push_exception()
-
-
-@contextlib.contextmanager
-def notify_busy(log, message):
-	log.push_busy(message)
-	try:
-		yield
-	finally:
-		log.pop(message)
-
-
-class ErrorMessage(object):
-
-	LEVEL_ERROR = 0
-	LEVEL_BUSY = 1
-	LEVEL_INFO = 2
-
-	def __init__(self, message, level):
-		self._message = message
-		self._level = level
-		self._time = datetime.datetime.now()
-
-	@property
-	def level(self):
-		return self._level
-
-	@property
-	def message(self):
-		return self._message
-
-	def __repr__(self):
-		return "%s.%s(%r, %r)" % (__name__, self.__class__.__name__, self._message, self._level)
-
-
-class QErrorLog(QtCore.QObject):
-
-	messagePushed = qt_compat.Signal()
-	messagePopped = qt_compat.Signal()
-
-	def __init__(self):
-		QtCore.QObject.__init__(self)
-		self._messages = []
-
-	def push_busy(self, message):
-		_moduleLogger.info("Entering state: %s" % message)
-		self._push_message(message, ErrorMessage.LEVEL_BUSY)
-
-	def push_message(self, message):
-		self._push_message(message, ErrorMessage.LEVEL_INFO)
-
-	def push_error(self, message):
-		self._push_message(message, ErrorMessage.LEVEL_ERROR)
-
-	def push_exception(self):
-		userMessage = str(sys.exc_info()[1])
-		_moduleLogger.exception(userMessage)
-		self.push_error(userMessage)
-
-	def pop(self, message = None):
-		if message is None:
-			del self._messages[0]
-		else:
-			_moduleLogger.info("Exiting state: %s" % message)
-			messageIndex = [
-				i
-				for (i, error) in enumerate(self._messages)
-				if error.message == message
-			]
-			# Might be removed out of order
-			if messageIndex:
-				del self._messages[messageIndex[0]]
-		self.messagePopped.emit()
-
-	def peek_message(self):
-		return self._messages[0]
-
-	def _push_message(self, message, level):
-		self._messages.append(ErrorMessage(message, level))
-		# Sort is defined as stable, so this should be fine
-		self._messages.sort(key=lambda x: x.level)
-		self.messagePushed.emit()
-
-	def __len__(self):
-		return len(self._messages)
 
 
 class ErrorDisplay(object):
@@ -140,16 +49,20 @@ class ErrorDisplay(object):
 	def _show_error(self):
 		if self._icons is None:
 			self._icons = {
-				ErrorMessage.LEVEL_BUSY:
+				qore_utils.QErrorMessage.LEVEL_BUSY:
 					get_theme_icon(
 						#("process-working", "view-refresh", "general_refresh", "gtk-refresh")
 						("view-refresh", "general_refresh", "gtk-refresh", )
 					).pixmap(32, 32),
-				ErrorMessage.LEVEL_INFO:
+				qore_utils.QErrorMessage.LEVEL_WARNING:
+					get_theme_icon(
+						("dialog-warning", )
+					).pixmap(32, 32),
+				qore_utils.QErrorMessage.LEVEL_INFO:
 					get_theme_icon(
 						("dialog-information", "general_notes", "gtk-info")
 					).pixmap(32, 32),
-				ErrorMessage.LEVEL_ERROR:
+				qore_utils.QErrorMessage.LEVEL_ERROR:
 					get_theme_icon(
 						("dialog-error", "app_install_error", "gtk-dialog-error")
 					).pixmap(32, 32),

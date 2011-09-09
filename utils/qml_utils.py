@@ -16,9 +16,10 @@ QML Tips:
 from __future__ import with_statement
 from __future__ import division
 
+import os
 import logging
 
-import util.qt_compat as qt_compat
+import qt_compat
 QtCore = qt_compat.QtCore
 QtGui = qt_compat.import_module("QtGui")
 QtDeclarative = qt_compat.import_module("QtDeclarative")
@@ -47,6 +48,32 @@ def disable_default_window_painting(view):
 	view.setAttribute(QtCore.Qt.WA_NoSystemBackground)
 	view.viewport().setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
 	view.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground)
+
+
+class SystemThemeIconProvider(QtDeclarative.QDeclarativeImageProvider):
+
+	IMAGE_TYPE = QtDeclarative.QDeclarativeImageProvider.ImageType.Pixmap
+
+	def __init__(self):
+		QtDeclarative.QDeclarativeImageProvider.__init__(self, self.IMAGE_TYPE)
+
+	def requestPixmap(self, id, size, requestedSize):
+		icon = QtGui.QIcon.fromTheme(id)
+		pixmap = icon.pixmap(requestedSize)
+		return pixmap
+
+
+class LocalImageProvider(QtDeclarative.QDeclarativeImageProvider):
+
+	IMAGE_TYPE = QtDeclarative.QDeclarativeImageProvider.ImageType.Image
+
+	def __init__(self, path):
+		QtDeclarative.QDeclarativeImageProvider.__init__(self, self.IMAGE_TYPE)
+		self._path = path
+
+	def requestImage(self, id, size, requestedSize):
+		image = QtGui.QImage(os.path.join(self._path, id))
+		return image
 
 
 if __name__ == "__main__":

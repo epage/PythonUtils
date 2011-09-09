@@ -8,6 +8,7 @@ import pickle
 import contextlib
 import itertools
 import codecs
+import logging
 from xml.sax import saxutils
 import csv
 try:
@@ -229,3 +230,27 @@ def unescape(text):
 def escape(text):
 	fancy = saxutils.escape(text, _ESCAPE_ENTITIES)
 	return fancy
+
+
+class ErrorLogHandler(logging.Handler):
+
+	def __init__(self, errorLog, level = logging.NOTSET):
+		logging.Handler.__init__(self, level = level)
+		self._errorLog = errorLog
+
+	def emit(self, record):
+		try:
+			# We don't want to write a custom formatter just to avoid tracebacks
+			exc, exc_text = record.exc_info, record.exc_text
+			record.exc_info, record.exc_text = None, None
+			msg = self.format(record)
+			record.exc_info, record.exc_text = exc, exc_text
+
+			self._errorLog.push_message(msg, record.levelno)
+		except (KeyboardInterrupt, SystemExit):
+			raise
+		except:
+			self.handleError(record)
+
+	def createLock(self):
+		self.lock = None

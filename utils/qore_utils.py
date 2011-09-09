@@ -2,6 +2,8 @@
 
 from __future__ import with_statement
 
+import sys
+import inspect
 import contextlib
 import logging
 
@@ -39,6 +41,7 @@ class _WorkerThread(QtCore.QObject):
 		self._taskComplete.connect(self._futureThread._on_task_complete)
 
 	@qt_compat.Slot(object)
+	@misc.log_exception(_moduleLogger)
 	def _on_task_added(self, task):
 		self.__on_task_added(task)
 
@@ -87,6 +90,7 @@ class FutureThread(QtCore.QObject):
 		self._addTask.emit(task)
 
 	@qt_compat.Slot(object)
+	@misc.log_exception(_moduleLogger)
 	def _on_task_complete(self, taskResult):
 		self.__on_task_complete(taskResult)
 
@@ -103,6 +107,115 @@ class FutureThread(QtCore.QObject):
 			callback(result)
 		except Exception:
 			_moduleLogger.exception("Callback errored")
+
+
+@contextlib.contextmanager
+def notify_error(log):
+	try:
+		yield
+	except:
+		log.push_exception()
+
+
+@contextlib.contextmanager
+def notify_busy(log, message):
+	log.push_busy(message)
+	try:
+		yield
+	finally:
+		log.pop(message)
+
+
+class QErrorMessage(QtCore.QObject):
+
+	LEVEL_ERROR = logging.ERROR
+	LEVEL_WARNING = logging.WARNING
+	LEVEL_INFO = logging.INFO
+	LEVEL_BUSY = -1
+
+	def __init__(self, message, level):
+		QtCore.QObject.__init__(self)
+		self._message = message
+		self._level = level
+
+	changed = qt_compat.Signal()
+	level = qt_compat.Property(int, lambda self: self._level, notify=changed)
+	message = qt_compat.Property(unicode, lambda self: self._message, notify=changed)
+
+	def __repr__(self):
+		return "%s.%s(%r, %r)" % (__name__, self.__class__.__name__, self._message, self._level)
+
+
+class QErrorLog(QtCore.QObject):
+
+	messagePushed = qt_compat.Signal()
+	messagePopped = qt_compat.Signal()
+	currentMessageChanged = qt_compat.Signal()
+
+	def __init__(self):
+		QtCore.QObject.__init__(self)
+		self._messages = []
+		self._nullMessage = QErrorMessage("", QErrorMessage.LEVEL_INFO)
+
+	@qt_compat.Slot(str)
+	def push_busy(self, message):
+		_moduleLogger.debug("Entering state: %s" % message)
+		self._push_message(message, QErrorMessage.LEVEL_BUSY)
+
+	@qt_compat.Slot(str)
+	def push_info(self, message):
+		self._push_message(message, QErrorMessage.LEVEL_INFO)
+
+	@qt_compat.Slot(str)
+	def push_error(self, message):
+		self._push_message(message, QErrorMessage.LEVEL_ERROR)
+
+	@qt_compat.Slot(str, int)
+	def push_message(self, message, level):
+		self._push_message(message, level)
+
+	def push_exception(self):
+		userMessage = str(sys.exc_info()[1])
+		_moduleLogger.exception(userMessage)
+		self.push_error(userMessage)
+
+	@qt_compat.Slot()
+	@qt_compat.Slot(str)
+	def pop(self, message = None):
+		if message is None:
+			del self._messages[0]
+		else:
+			_moduleLogger.debug("Exiting state: %s" % message)
+			messageIndex = [
+				i
+				for (i, error) in enumerate(self._messages)
+				if error.message == message
+			]
+			# Might be removed out of order
+			if messageIndex:
+				del self._messages[messageIndex[0]]
+		self.messagePopped.emit()
+		self.currentMessageChanged.emit()
+
+	def peek_message(self):
+		if self._messages:
+			return self._messages[0]
+		else:
+			return self._nullMessage
+
+	currentMessage = qt_compat.Property(QtCore.QObject, lambda self: self.peek_message(), notify=currentMessageChanged)
+	hasMessages = qt_compat.Property(bool, lambda self: bool(self._messages), notify=currentMessageChanged)
+
+	def _push_message(self, message, level):
+		self._messages.append(QErrorMessage(message, level))
+		# Sort is defined as stable, so this should be fine
+		self._messages.sort(key=lambda x: x.level)
+		self._messages.reverse()
+		self.messagePushed.emit()
+		self.currentMessageChanged.emit()
+
+	def __len__(self):
+		return len(self._messages)
 
 
 def create_single_column_list_model(columnName, **kwargs):
@@ -256,6 +369,7 @@ class FileSystemModel(QtCore.QAbstractListModel):
 	parent = qt_compat.Property(str, _parent, notify=backendChanged)
 
 	@qt_compat.Slot(str)
+	@misc.log_exception(_moduleLogger)
 	def browse_to(self, path):
 		if self._child is None:
 			self._child = FileSystemModel(self._model, path)
@@ -265,6 +379,7 @@ class FileSystemModel(QtCore.QAbstractListModel):
 		return self._child
 
 	@qt_compat.Slot(str)
+	@misc.log_exception(_moduleLogger)
 	def switch_to(self, path):
 		with scoped_model_reset(self):
 			self._path = path
@@ -353,16 +468,16 @@ def create_qobject(*classDef, **kwargs):
 				setattr(self, '_'+key, initKwargs.get(key, val()))
 
 		def __repr__(self):
-			values = (
+			qTypeNames = (
 				'%s=%r' % (key, getattr(self, '_'+key))
-				for key, value in classDef
+				for key, qTypeName in classDef
 			)
 			return '<%s (%s)>' % (
 				kwargs.get('name', self.__class__.__name__),
-				', '.join(values),
+				', '.join(qTypeNames),
 			)
 
-		for key, value in classDef:
+		for key, qTypeName in classDef:
 			nfy = locals()['_nfy_'+key] = qt_compat.Signal()
 
 			def _get(key):
@@ -371,16 +486,81 @@ def create_qobject(*classDef, **kwargs):
 				return f
 
 			def _set(key):
-				def f(self, value):
-					setattr(self, '_'+key, value)
+				def f(self, qTypeName):
+					setattr(self, '_'+key, qTypeName)
 					getattr(self, '_nfy_'+key).emit()
 				return f
 
 			setter = locals()['_set_'+key] = _set(key)
 			getter = locals()['_get_'+key] = _get(key)
 
-			locals()[key] = qt_compat.Property(value, getter, setter, notify=nfy)
+			locals()[key] = qt_compat.Property(qTypeName, getter, setter, notify=nfy)
 		del nfy, _get, _set, getter, setter
+
+	return AutoQObject
+
+
+def obj_to_qtype(obj):
+	return type(obj)
+
+
+def create_object_proxy(obj, **kwargs):
+	"""
+	>>> class Constants(object):
+	... 	FILE = "a"
+	... 	BIRD = "b"
+	>>> print Constants
+	<class '__main__.Constants'>
+	>>> qConstants = create_object_proxy(Constants, name="constants")()
+	>>> qConstants._get_FILE()
+	'a'
+	>>> qConstants._get_BIRD()
+	'b'
+	"""
+
+	members = list(
+		(name, value)
+		for (name, value) in inspect.getmembers(obj)
+		if not name.startswith("_")
+	)
+
+	class AutoQObject(QtCore.QObject):
+
+		def __init__(self, **initKwargs):
+			QtCore.QObject.__init__(self)
+
+		def __repr__(self):
+			return '<%s (wrapping %r)>' % (
+				kwargs.get('name', self.__class__.__name__),
+				obj,
+			)
+
+		changed = qt_compat.Signal()
+
+		for key, value in members:
+			qTypeName = obj_to_qtype(value)
+
+			def _get(key):
+				def _get(self):
+					return getattr(obj, key)
+				return _get
+
+			def _set(key):
+				if key == key.upper():
+					def _set_constant(self, v):
+						raise NotImplementedError()
+					return _set_constant
+				else:
+					def _set_mutable(self, v):
+						setattr(obj, key, v)
+						getattr(self, "changed").emit()
+					return _set_mutable
+
+			setter = locals()['_set_'+key] = _set(key)
+			getter = locals()['_get_'+key] = _get(key)
+
+			locals()[key] = qt_compat.Property(qTypeName, getter, setter, notify=changed)
+		del _get, _set, getter, setter, qTypeName
 
 	return AutoQObject
 
@@ -396,20 +576,20 @@ class QObjectProxy(object):
 	Attribute names starting with '_' are not proxied.
 	"""
 
-	def __init__(self, rootObject):
-		self._rootObject = rootObject
-		m = self._rootObject.metaObject()
+	def __init__(self, rootQObject):
+		self._rootQObject = rootQObject
+		m = self._rootQObject.metaObject()
 		self._properties = [
 			m.property(i).name()
 			for i in xrange(m.propertyCount())
 		]
 
 	def __getattr__(self, key):
-		value = self._rootObject.property(key)
+		value = self._rootQObject.property(key)
 
 		# No such property, so assume we call a slot
 		if value is None and key not in self._properties:
-			return getattr(self._rootObject, key)
+			return getattr(self._rootQObject, key)
 
 		return value
 
@@ -417,7 +597,7 @@ class QObjectProxy(object):
 		if key.startswith('_'):
 			object.__setattr__(self, key, value)
 		else:
-			self._rootObject.setProperty(key, value)
+			self._rootQObject.setProperty(key, value)
 
 
 if __name__ == "__main__":

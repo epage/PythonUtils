@@ -9,6 +9,7 @@ import qt_compat
 QtCore = qt_compat.QtCore
 QtGui = qt_compat.import_module("QtGui")
 
+import qore_utils
 import qui_utils
 import misc as misc_utils
 import linux as linux_utils
@@ -29,7 +30,7 @@ class ApplicationWrapper(object):
 		self._qapp = qapp
 		self._clipboard = QtGui.QApplication.clipboard()
 
-		self._errorLog = qui_utils.QErrorLog()
+		self._errorLog = qore_utils.QErrorLog()
 		self._mainWindow = None
 
 		self._fullscreenAction = QtGui.QAction(None)

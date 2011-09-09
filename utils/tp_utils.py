@@ -189,7 +189,7 @@ class EnableSystemContactIntegration(object):
 
 	@misc.log_exception(_moduleLogger)
 	def _on_field_set(self):
-		_moduleLogger.info("SecondaryVCardFields Set")
+		_moduleLogger.debug("SecondaryVCardFields Set")
 
 	@misc.log_exception(_moduleLogger)
 	def _on_error(self, error):

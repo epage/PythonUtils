@@ -44,7 +44,7 @@ class BusyWait(object):
 class Window(object):
 
 	def __init__(self):
-		self._errorLog = qui_utils.QErrorLog()
+		self._errorLog = qore_utils.QErrorLog()
 		self._errorDisplay = qui_utils.ErrorDisplay(self._errorLog)
 		self._taskPool = qore_utils.FutureThread()
 		self._taskPool.start()
@@ -93,36 +93,36 @@ class Window(object):
 		agt.start(10)
 
 	def _call_into_background(self, t):
-		with qui_utils.notify_error(self._errorLog):
-			with qui_utils.notify_busy(self._errorLog, "Counting..."):
+		with qore_utils.notify_error(self._errorLog):
+			with qore_utils.notify_busy(self._errorLog, "Counting..."):
 				print "Start count"
 				yield self._busyWait.wait, (t, ), {}
 				print "Count done"
 
 	@misc.log_exception(_moduleLogger)
 	def _on_exception(self, *args):
-		with qui_utils.notify_error(self._errorLog):
+		with qore_utils.notify_error(self._errorLog):
 			l = [1, 2, 3]
 			print l["a"]
 
 	@misc.log_exception(_moduleLogger)
 	def _on_shown(self):
-		self._errorLog.push_message("shown")
+		self._errorLog.push_info("shown")
 		print "shown"
 
 	@misc.log_exception(_moduleLogger)
 	def _on_hidden(self):
-		self._errorLog.push_message("hidden")
+		self._errorLog.push_info("hidden")
 		print "hidden"
 
 	@misc.log_exception(_moduleLogger)
 	def _on_closed(self):
-		self._errorLog.push_message("closed")
+		self._errorLog.push_info("closed")
 		print "closed"
 
 	@misc.log_exception(_moduleLogger)
 	def _on_destroyed(self):
-		self._errorLog.push_message("destroyed")
+		self._errorLog.push_info("destroyed")
 		print "destroyed"
 
 

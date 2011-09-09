@@ -212,7 +212,7 @@ class AutoSignal(object):
 
 	@misc.log_exception(_moduleLogger)
 	def __on_destroy(self, widget):
-		_moduleLogger.info("Destroy: %r (%s to clean up)" % (self, len(self.__disconnectPool)))
+		_moduleLogger.debug("Destroy: %r (%s to clean up)" % (self, len(self.__disconnectPool)))
 		for widget, id in self.__disconnectPool:
 			widget.disconnect(id)
 		del self.__disconnectPool[:]
